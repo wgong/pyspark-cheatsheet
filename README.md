@@ -18,7 +18,7 @@ A quick reference guide to the most commonly used patterns and functions in PySp
 - [String Operations](#string-operations)
     - [String Filters](#string-filters)
     - [String Functions](#string-functions)
-- [Date/Timestamp Operations](#date-operations)
+- [Date Operations](#date-operations)
 - [Array Operations](#array-operations)
 - [Aggregation Operations](#aggregation-operations)
 - [Advanced Operations](#advanced-operations)
