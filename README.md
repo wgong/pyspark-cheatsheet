@@ -24,7 +24,7 @@ A quick reference guide to the most commonly used patterns and functions in PySp
 - [Advanced Operations](#advanced-operations)
     - [Repartitioning](#repartitioning)
     - [UDFs (User Defined Functions)](#udfs-user-defined-functions)
-- [SQL Operations](#sql-operations)
+- [SQL](#sql)
 - [Stream](#stream)
 
 If you can't find what you're looking for, check out the [PySpark Official Documentation](https://spark.apache.org/docs/latest/api/python/pyspark.sql.html) and add it here!
@@ -253,7 +253,7 @@ df = df.withColumn('id', F.regexp_extract(id, '[0-9]*', 0))
 
 
 
-## Date/Timestamp Operations
+## Date Operations
 
 ```python
 dateDF = spark.range(10)\
@@ -339,7 +339,7 @@ df = df.withColumn('name', random_name_udf())
 ```
 
 
-#### SQL
+## SQL
 
 ```python
 file_path = SPARK_BOOK_DATA_PATH + "/data/flight-data/json/2015-summary.json"
@@ -357,7 +357,7 @@ FROM some_sql_view GROUP BY DEST_COUNTRY_NAME
 
 ```
 
-#### Stream
+## Stream
 
 ```python
 # schema
