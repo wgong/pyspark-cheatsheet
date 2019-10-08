@@ -5,6 +5,8 @@ A quick reference guide to the most commonly used patterns and functions in PySp
 #### Table of Contents
 
 - [Common Patterns](#common-patterns)
+    - [Create session](#create-session)
+    - [Data Source API](#data-source)
     - [Importing Functions & Types](#importing-functions--types)
     - [Filtering](#filtering)
     - [Joins](#joins)
@@ -12,25 +14,73 @@ A quick reference guide to the most commonly used patterns and functions in PySp
     - [Coalescing Values](#coalescing-values)
     - [Casting, Nulls & Duplicates](#casting-nulls--duplicates)
 - [Column Operations](#column-operations)
+- [Number Operations](#number-operations)
 - [String Operations](#string-operations)
     - [String Filters](#string-filters)
     - [String Functions](#string-functions)
-- [Number Operations](#number-operations)
+- [Date/Timestamp Operations](#date-operations)
 - [Array Operations](#array-operations)
 - [Aggregation Operations](#aggregation-operations)
 - [Advanced Operations](#advanced-operations)
     - [Repartitioning](#repartitioning)
     - [UDFs (User Defined Functions)](#udfs-user-defined-functions)
+- [SQL Operations](#sql-operations)
+- [Stream](#stream)
 
 If you can't find what you're looking for, check out the [PySpark Official Documentation](https://spark.apache.org/docs/latest/api/python/pyspark.sql.html) and add it here!
  
 ## Common Patterns
 
+#### Create session
+
+```python
+spark = SparkSession.builder.appName("pyspark").getOrCreate()
+```
+
+#### Data Source API
+
+```python
+# read
+file_path = SPARK_BOOK_DATA_PATH + "/data/flight-data/csv/2010-summary.csv"
+csvFile = spark.read.format("csv")\
+  .option("header", "true")\
+  .option("mode", "FAILFAST")\
+  .option("inferSchema", "true")\
+  .load(file_path)
+
+file_path = SPARK_BOOK_DATA_PATH + "/data/flight-data/parquet/2010-summary.parquet"
+csvFile = spark.read.format("parquet").load(file_path)
+
+# write
+csvFile.write.format("csv").mode("overwrite").option("sep", "\t")\
+  .save("/tmp/my-tsv-file.tsv")
+csvFile.write.format("json").mode("overwrite").save("/tmp/my-json-file.json")
+
+# sqlite database
+file_path = SPARK_BOOK_DATA_PATH + "/data/flight-data/jdbc/my-sqlite.db"
+driver = "org.sqlite.JDBC"
+path = file_path
+url = "jdbc:sqlite:" + path
+tablename = "flight_info"
+dbDataFrame = spark.read.format("jdbc").option("url", url).option("dbtable", tablename)\
+    .option("driver",  driver).load()
+
+# postgresql database
+pgDF = spark.read.format("jdbc")\
+  .option("driver", "org.postgresql.Driver")\
+  .option("url", "jdbc:postgresql://database_server")\
+  .option("dbtable", "schema.tablename")\
+  .option("user", "username").option("password", "my-secret-password").load()
+```
+
+
 #### Importing Functions & Types
 
 ```python
 # Easily reference these as F.my_function() and T.my_type() below
-from pyspark.sql import functions as F, types as T
+from pyspark.sql import SparkSession
+from pyspark.sql import functions as F
+from pyspark.sql import types as T
 ```
 
 #### Filtering
@@ -127,11 +177,31 @@ for col in df.columns:
     df = df.withColumnRenamed(col, col.lower().replace(' ', '_').replace('-', '_'))
 ```
 
+## Number Operations
+
+```python
+# Round - F.round(col, scale=0)
+df = df.withColumn('price', F.round('price', 0))
+
+# Floor - F.floor(col)
+df = df.withColumn('price', F.floor('price'))
+
+# Ceiling - F.ceil(col)
+df = df.withColumn('price', F.ceil('price'))
+```
+
+
 ## String Operations
 
 #### String Filters
 
 ```python
+# Is Null - col.isNull()
+df = df.filter(df.is_adult.isNull())
+
+# Is Not Null - col.isNotNull()
+df = df.filter(df.first_name.isNotNull())
+
 # Contains - col.contains(string)
 df = df.filter(df.name.contains('o'))
 
@@ -140,12 +210,6 @@ df = df.filter(df.name.startswith('Al'))
 
 # Ends With - col.endswith(string)
 df = df.filter(df.name.endswith('ice'))
-
-# Is Null - col.isNull()
-df = df.filter(df.is_adult.isNull())
-
-# Is Not Null - col.isNotNull()
-df = df.filter(df.first_name.isNotNull())
 
 # Like - col.like(string_with_sql_wildcards)
 df = df.filter(df.name.like('Al%'))
@@ -187,18 +251,41 @@ df = df.withColumn('id', F.regexp_replace(id, '0F1(.*)', '1F1-$1'))
 df = df.withColumn('id', F.regexp_extract(id, '[0-9]*', 0))
 ```
 
-## Number Operations
+
+
+## Date/Timestamp Operations
 
 ```python
-# Round - F.round(col, scale=0)
-df = df.withColumn('price', F.round('price', 0))
+dateDF = spark.range(10)\
+  .withColumn("today", F.current_date())\
+  .withColumn("now", F.current_timestamp())
 
-# Floor - F.floor(col)
-df = df.withColumn('price', F.floor('price'))
+# date_add, date_sub
+dateDF.select(F.date_sub(F.col("today"), 5), F.date_add(F.col("today"), 5)).show(1)
 
-# Ceiling - F.ceil(col)
-df = df.withColumn('price', F.ceil('price'))
+# datediff
+dateDF.withColumn("week_ago", F.date_sub(F.col("today"), 7))\
+    .select(F.datediff(F.col("week_ago"), F.col("today")))\
+    .show(1)
+
+# to_date, months_between
+dateDF.select(
+    F.to_date(F.lit("2016-01-01")).alias("start"),
+    F.to_date(F.lit("2017-05-22")).alias("end"))\
+    .select(F.months_between(F.col("start"), F.col("end")))\
+    .show(1)
+
+# dateFormat
+dateFormat = "yyyy-dd-MM"
+cleanDateDF = spark.range(1).select(
+    F.to_date(F.lit("2017-12-11"), dateFormat).alias("date"),
+    F.to_date(F.lit("2017-20-12"), dateFormat).alias("date2"))
+cleanDateDF.show(1)
+
+# to_timestamp
+cleanDateDF.select(F.to_timestamp(F.col("date"), dateFormat)).show()
 ```
+
 
 ## Array Operations
 
@@ -232,6 +319,9 @@ df = df.groupBy('age').agg(F.collect_set('name').alias('person_names'))
 ```python
 # Repartition – df.repartition(num_output_partitions)
 df = df.repartition(1)
+
+# Show partition
+df.rdd.getNumPartitions()
 ```
 
 #### UDFs (User Defined Functions)
@@ -247,3 +337,45 @@ import random
 random_name_udf = F.udf(lambda: random.choice(['Bob', 'Tom', 'Amy', 'Jenna']))
 df = df.withColumn('name', random_name_udf())
 ```
+
+
+#### SQL
+
+```python
+file_path = SPARK_BOOK_DATA_PATH + "/data/flight-data/json/2015-summary.json"
+df = spark.read.json(file_path)
+
+# DF => SQL
+df.createOrReplaceTempView("some_sql_view") 
+
+# SQL => DF
+df = spark.sql("""
+SELECT DEST_COUNTRY_NAME, sum(count)
+FROM some_sql_view GROUP BY DEST_COUNTRY_NAME
+""")\
+   .where("DEST_COUNTRY_NAME like 'S%'").where("`sum(count)` > 10")
+
+```
+
+#### Stream
+
+```python
+# schema
+file_path = SPARK_BOOK_DATA_PATH + "/data/activity-data/"
+static = spark.read.json(file_path)
+dataSchema = static.schema
+
+# readStream
+streaming = spark.readStream.schema(dataSchema)\
+  .option("maxFilesPerTrigger", 1)\
+  .json(file_path)
+
+# transform
+activityCounts = streaming.groupBy("gt").count()
+
+# writeStream
+activityQuery = activityCounts.writeStream.queryName("activity_counts")\
+  .format("memory").outputMode("complete")\
+  .start()
+```
+
